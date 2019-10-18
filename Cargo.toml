@@ -1,0 +1,23 @@
+[package]
+name = "tgcd"
+version = "0.1.0"
+authors = ["foldu <foldu@protonmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = "=0.1.0-alpha.3"
+tokio = "0.2.0-alpha.6"
+anyhow = "1.0.12"
+prost = "0.5.0"
+futures-preview = "0.3.0-alpha.19"
+bytes = "0.4.12"
+snafu = { version = "0.5.0", features = ["unstable-futures"] }
+tokio-postgres = "0.5.0-alpha.1"
+envy = "0.4.0"
+serde = { version = "1.0.101", features = ["derive"] }
+log = "0.4.8"
+
+[build-dependencies]
+tonic-build = "0.1.0-alpha.3"
