@@ -4,8 +4,8 @@ CREATE TABLE hash(
 );
 
 CREATE TABLE hash_tag(
-    hash_id INTEGER NOT NULL,
-    tag_id INTEGER NOT NULL,
+    hash_id INTEGER NOT NULL REFERENCES hash(id),
+    tag_id INTEGER NOT NULL REFERENCES tag(id),
     PRIMARY KEY (hash_id, tag_id)
 );
 

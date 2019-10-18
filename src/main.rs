@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use futures::prelude::*;
 use serde::Deserialize;
-use snafu::{futures::TryFutureExt, ResultExt, Snafu};
+use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio_postgres as postgres;
 use tonic::{transport::Server, Request, Response, Status};
@@ -24,11 +24,16 @@ struct Tgcd {
 }
 
 impl Tgcd {
-    async fn new(cfg: &Config) -> Result<Self, anyhow::Error> {
-        let (client, connection) = postgres::connect(&cfg.postgres_url, postgres::NoTls).await?;
+    async fn new(cfg: &Config) -> Result<Self, SetupError> {
+        let (client, connection) = postgres::connect(&cfg.postgres_url, postgres::NoTls)
+            .map_err(SetupError::PostgresConnect)
+            .await?;
 
         let schema = include_str!("../sql/schema.sql");
-        client.batch_execute(schema).await?;
+        client
+            .batch_execute(schema)
+            .map_err(SetupError::PostgresSchema)
+            .await?;
 
         let connection = connection.map(|r| {
             if let Err(e) = r {
@@ -49,15 +54,31 @@ struct TgcdInner {
     client: Mutex<postgres::Client>,
 }
 
-#[derive(Snafu, Debug)]
+#[derive(Error, Debug)]
+pub enum SetupError {
+    #[error("Can't connect to postgres: {0}")]
+    PostgresConnect(#[source] postgres::Error),
+
+    #[error("Failed creating schema: {0}")]
+    PostgresSchema(#[source] postgres::Error),
+
+    #[error("Missing environment variable: {0}")]
+    Env(#[from] envy::Error),
+
+    #[error("Can't bind server: {0}")]
+    Bind(#[from] tonic::transport::Error),
+}
+
+#[derive(Error, Debug)]
 pub enum Error {
-    Postgres { source: postgres::Error },
+    #[error("Error from postgres: {0}")]
+    Postgres(#[from] postgres::Error),
 }
 
 impl From<Error> for Status {
     fn from(other: Error) -> Self {
         match other {
-            Error::Postgres { .. } => Status::new(tonic::Code::Unavailable, "db error"),
+            Error::Postgres(_) => Status::new(tonic::Code::Unavailable, "db error"),
         }
     }
 }
@@ -73,9 +94,8 @@ async fn get_tags(client: &postgres::Client, hash: &[u8]) -> Result<Vec<String>,
             AND hash_tag.hash_id = hash.id
             AND hash.hash = $1",
         )
-        .context(Postgres)
         .await?;
-    let tags = client.query(&stmnt, &[&hash]).context(Postgres).await?;
+    let tags = client.query(&stmnt, &[&hash]).await?;
     Ok(tags.into_iter().map(|row| row.get(0)).collect())
 }
 
@@ -97,14 +117,11 @@ async fn get_or_insert_hash(client: &postgres::Transaction<'_>, hash: &[u8]) -> 
     WHERE hash = $1
     ",
         )
-        .context(Postgres)
         .await?;
 
-    client
-        .query_one(&stmnt, &[&hash])
-        .context(Postgres)
-        .await
-        .map(|row| row.get(0))
+    let row = client.query_one(&stmnt, &[&hash]).await?;
+
+    Ok(row.get(0))
 }
 
 async fn get_or_insert_tag(txn: &postgres::Transaction<'_>, tag: &str) -> Result<i32, Error> {
@@ -125,13 +142,11 @@ async fn get_or_insert_tag(txn: &postgres::Transaction<'_>, tag: &str) -> Result
     WHERE name = $1
     ",
         )
-        .context(Postgres)
         .await?;
 
-    txn.query_one(&stmnt, &[&tag])
-        .context(Postgres)
-        .await
-        .map(|row| row.get(0))
+    let row = txn.query_one(&stmnt, &[&tag]).await?;
+
+    Ok(row.get(0))
 }
 
 #[tonic::async_trait]
@@ -147,7 +162,7 @@ impl server::Tgcd for Tgcd {
         let mut client = self.inner.client.lock().await;
         let AddTags { hash, tags } = req.into_inner();
 
-        let txn = client.transaction().context(Postgres).await?;
+        let txn = client.transaction().map_err(Error::Postgres).await?;
         let hash_id = get_or_insert_hash(&txn, &hash).await?;
         for tag in tags {
             let tag_id = get_or_insert_tag(&txn, &tag).await?;
@@ -155,17 +170,17 @@ impl server::Tgcd for Tgcd {
                 "INSERT INTO hash_tag(tag_id, hash_id) VALUES ($1, $2)",
                 &[&tag_id, &hash_id],
             )
-            .context(Postgres)
+            .map_err(Error::Postgres)
             .await?;
         }
 
-        txn.commit().context(Postgres).await?;
+        txn.commit().map_err(Error::Postgres).await?;
 
         Ok(Response::new(()))
     }
 }
 
-async fn run() -> Result<(), anyhow::Error> {
+async fn run() -> Result<(), SetupError> {
     let addr = "0.0.0.0:8000".parse().unwrap();
     let config = envy::from_env()?;
     let tgcd = Tgcd::new(&config).await?;
