@@ -1,3 +1,5 @@
+mod data;
+
 use std::sync::Arc;
 
 use futures::prelude::*;
@@ -7,7 +9,7 @@ use tokio::sync::Mutex;
 use tokio_postgres as postgres;
 use tonic::{transport::Server, Request, Response, Status};
 
-use tgcd_proto::{server, AddTags, Hash, Tags};
+use tgcd_proto::{server, AddTags, GetMultipleTagsReq, GetMultipleTagsResp, Hash, Tags};
 
 #[derive(Deserialize)]
 struct Config {
@@ -173,6 +175,13 @@ impl server::Tgcd for Tgcd {
         txn.commit().map_err(Error::Postgres).await?;
 
         Ok(Response::new(()))
+    }
+
+    async fn get_multiple_tags(
+        &self,
+        _req: Request<GetMultipleTagsReq>,
+    ) -> Result<Response<GetMultipleTagsResp>, Status> {
+        Ok(Response::new(GetMultipleTagsResp { tags: vec![] }))
     }
 }
 
