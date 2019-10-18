@@ -7,11 +7,7 @@ use tokio::sync::Mutex;
 use tokio_postgres as postgres;
 use tonic::{transport::Server, Request, Response, Status};
 
-mod tgcd {
-    tonic::include_proto!("tgcd");
-}
-
-use tgcd::{server, AddTags, Hash, Tags};
+use tgcd_proto::{server, AddTags, Hash, Tags};
 
 #[derive(Deserialize)]
 struct Config {
