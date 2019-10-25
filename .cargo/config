@@ -1,0 +1,2 @@
+[alias]
+install-client = "install --path . --no-default-features --features client"

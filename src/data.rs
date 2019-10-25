@@ -30,7 +30,7 @@ impl TryFrom<String> for Tag {
 
     fn try_from(other: String) -> Result<Self, Self::Error> {
         let len = other.chars().count();
-        if len > 1 && len < 256 {
+        if len > 0 && len < 256 {
             Ok(Tag(other))
         } else {
             Err(TagError { len, s: other })
@@ -38,18 +38,30 @@ impl TryFrom<String> for Tag {
     }
 }
 
-#[derive(Clone)]
-pub struct Blake2bpHash(Box<[u8; 64]>);
+impl Tag {
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
 
-impl Display for Blake2bpHash {
+#[derive(Clone)]
+pub struct Blake2bHash(Box<[u8; 64]>);
+
+impl Display for Blake2bHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         f.write_str(&hex::encode(&self.0[..]))
     }
 }
 
-impl Deref for Blake2bpHash {
+impl Deref for Blake2bHash {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl AsRef<[u8]> for Blake2bHash {
+    fn as_ref(&self) -> &[u8] {
         &*self.0
     }
 }
@@ -60,7 +72,7 @@ pub struct HashError {
     len: usize,
 }
 
-impl TryFrom<&[u8]> for Blake2bpHash {
+impl TryFrom<&[u8]> for Blake2bHash {
     type Error = HashError;
 
     fn try_from(other: &[u8]) -> Result<Self, Self::Error> {
@@ -75,26 +87,56 @@ impl TryFrom<&[u8]> for Blake2bpHash {
     }
 }
 
-impl Blake2bpHash {
-    pub fn from_file<P>(path: P) -> Result<Blake2bpHash, io::Error>
-    where
-        P: AsRef<Path>,
-    {
-        use blake2b_simd::blake2bp::State;
-
-        let mut fh = std::fs::File::open(path)?;
-        let mut state = State::new();
+impl Blake2bHash {
+    pub fn from_read(r: &mut dyn Read) -> Result<Blake2bHash, io::Error> {
+        let mut state = blake2b_simd::State::new();
         let mut buf = [0; 8192];
         loop {
-            match fh.read(&mut buf)? {
+            match r.read(&mut buf)? {
                 0 => break,
                 n => {
                     state.update(&buf[..n]);
                 }
             }
         }
-
         let ret = Box::new(*state.finalize().as_array());
         Ok(Self(ret))
+    }
+
+    pub fn from_file<P>(path: P) -> Result<Blake2bHash, io::Error>
+    where
+        P: AsRef<Path>,
+    {
+        let mut fh = std::fs::File::open(path)?;
+
+        Self::from_read(&mut fh)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hashing_works() {
+        let input = vec![b'a'; 8192 * 3 - 28];
+        let real_input_hash = "140def0a7a9c50efd14d7a11330e8a8c4d0cf3a1d1fe0953060c13a78928ded152d198c7e20a69d237b98ee3639822156fb78778577a97efd1dccabb6c4a74f6";
+        let hash = Blake2bHash::from_read(&mut std::io::Cursor::new(input)).unwrap();
+        assert_eq!(&hash.to_string(), real_input_hash);
+    }
+
+    #[test]
+    fn try_from_hash() {
+        assert!(Blake2bHash::try_from(&vec![0_u8; 64][..]).is_ok());
+        assert!(Blake2bHash::try_from(&vec![0_u8; 20][..]).is_err())
+    }
+
+    #[test]
+    fn try_from_tag() {
+        assert!(Tag::try_from(String::from("")).is_err());
+        assert!(Tag::try_from(String::from("a")).is_ok());
+        assert!(Tag::try_from(std::iter::repeat('a').take(255).collect::<String>()).is_ok());
+        assert!(Tag::try_from(std::iter::repeat('a').take(256).collect::<String>()).is_err());
+        assert!(Tag::try_from(std::iter::repeat('a').take(1000).collect::<String>()).is_err());
     }
 }

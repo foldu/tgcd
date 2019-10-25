@@ -1,15 +1,14 @@
-mod data;
-
-use std::sync::Arc;
+use std::{convert::TryFrom, sync::Arc};
 
 use futures::prelude::*;
 use serde::Deserialize;
+use tgcd::raw::{server, AddTags, GetMultipleTagsReq, GetMultipleTagsResp, Hash, Tags};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio_postgres as postgres;
 use tonic::{transport::Server, Request, Response, Status};
 
-use tgcd_proto::{server, AddTags, GetMultipleTagsReq, GetMultipleTagsResp, Hash, Tags};
+use tgcd::{Blake2bHash, HashError, Tag, TagError};
 
 #[derive(Deserialize)]
 struct Config {
@@ -23,22 +22,23 @@ struct Tgcd {
 
 impl Tgcd {
     async fn new(cfg: &Config) -> Result<Self, SetupError> {
-        let (client, connection) = postgres::connect(&cfg.postgres_url, postgres::NoTls)
+        let (mut client, connection) = postgres::connect(&cfg.postgres_url, postgres::NoTls)
             .map_err(SetupError::PostgresConnect)
             .await?;
 
-        let schema = include_str!("../sql/schema.sql");
-        client
-            .batch_execute(schema)
-            .map_err(SetupError::PostgresSchema)
-            .await?;
-
-        let connection = connection.map(|r| {
+        tokio::spawn(connection.map(|r| {
             if let Err(e) = r {
                 log::error!("{}", e);
             }
-        });
-        tokio::spawn(connection);
+        }));
+
+        let txn = client.transaction().await.unwrap();
+        let schema = include_str!("../../sql/schema.sql");
+        let _ = txn
+            .batch_execute(schema)
+            .map_err(SetupError::PostgresSchema)
+            .await;
+        txn.commit().await.unwrap();
 
         Ok(Self {
             inner: Arc::new(TgcdInner {
@@ -71,17 +71,26 @@ pub enum SetupError {
 pub enum Error {
     #[error("Error from postgres: {0}")]
     Postgres(#[from] postgres::Error),
+
+    #[error("Invalid hash: {0}")]
+    ArgHash(HashError),
+
+    #[error("Invalid tag: {0}")]
+    ArgTag(TagError),
 }
 
 impl From<Error> for Status {
     fn from(other: Error) -> Self {
         match other {
             Error::Postgres(_) => Status::new(tonic::Code::Unavailable, "db error"),
+            Error::ArgHash(_) | Error::ArgTag(_) => {
+                Status::new(tonic::Code::InvalidArgument, "Received invalid argument")
+            }
         }
     }
 }
 
-async fn get_tags(client: &postgres::Client, hash: &[u8]) -> Result<Vec<String>, Error> {
+async fn get_tags(client: &postgres::Client, hash: &Blake2bHash) -> Result<Vec<String>, Error> {
     let stmnt = client
         .prepare(
             "
@@ -93,11 +102,14 @@ async fn get_tags(client: &postgres::Client, hash: &[u8]) -> Result<Vec<String>,
             AND hash.hash = $1",
         )
         .await?;
-    let tags = client.query(&stmnt, &[&hash]).await?;
+    let tags = client.query(&stmnt, &[&hash.as_ref()]).await?;
     Ok(tags.into_iter().map(|row| row.get(0)).collect())
 }
 
-async fn get_or_insert_hash(client: &postgres::Transaction<'_>, hash: &[u8]) -> Result<i32, Error> {
+async fn get_or_insert_hash(
+    client: &postgres::Transaction<'_>,
+    hash: &Blake2bHash,
+) -> Result<i32, Error> {
     let stmnt = client
         .prepare(
             "
@@ -117,7 +129,7 @@ async fn get_or_insert_hash(client: &postgres::Transaction<'_>, hash: &[u8]) -> 
         )
         .await?;
 
-    let row = client.query_one(&stmnt, &[&hash]).await?;
+    let row = client.query_one(&stmnt, &[&hash.as_ref()]).await?;
 
     Ok(row.get(0))
 }
@@ -151,7 +163,8 @@ async fn get_or_insert_tag(txn: &postgres::Transaction<'_>, tag: &str) -> Result
 impl server::Tgcd for Tgcd {
     async fn get_tags(&self, req: Request<Hash>) -> Result<Response<Tags>, Status> {
         let client = self.inner.client.lock().await;
-        let tags = get_tags(&client, &req.into_inner().hash).await?;
+        let hash = Blake2bHash::try_from(&*req.into_inner().hash).map_err(Error::ArgHash)?;
+        let tags = get_tags(&client, &hash).await?;
 
         Ok(Response::new(Tags { tags }))
     }
@@ -159,13 +172,19 @@ impl server::Tgcd for Tgcd {
     async fn add_tags_to_hash(&self, req: Request<AddTags>) -> Result<Response<()>, Status> {
         let mut client = self.inner.client.lock().await;
         let AddTags { hash, tags } = req.into_inner();
+        let hash = Blake2bHash::try_from(&*hash).map_err(Error::ArgHash)?;
+        let tags = tags
+            .into_iter()
+            .map(Tag::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Error::ArgTag)?;
 
         let txn = client.transaction().map_err(Error::Postgres).await?;
         let hash_id = get_or_insert_hash(&txn, &hash).await?;
         for tag in tags {
             let tag_id = get_or_insert_tag(&txn, &tag).await?;
             txn.execute(
-                "INSERT INTO hash_tag(tag_id, hash_id) VALUES ($1, $2)",
+                "INSERT INTO hash_tag(tag_id, hash_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                 &[&tag_id, &hash_id],
             )
             .map_err(Error::Postgres)
@@ -179,14 +198,30 @@ impl server::Tgcd for Tgcd {
 
     async fn get_multiple_tags(
         &self,
-        _req: Request<GetMultipleTagsReq>,
+        req: Request<GetMultipleTagsReq>,
     ) -> Result<Response<GetMultipleTagsResp>, Status> {
-        Ok(Response::new(GetMultipleTagsResp { tags: vec![] }))
+        let client = self.inner.client.lock().await;
+        let hashes = req.into_inner().hashes;
+        let hashes = hashes
+            .into_iter()
+            .map(|hash| Blake2bHash::try_from(&*hash))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(Error::ArgHash)?;
+
+        let tags = future::try_join_all(
+            hashes
+                .iter()
+                .map(|hash| get_tags(&client, &hash).map_ok(|tags| Tags { tags }))
+                .collect::<Vec<_>>(),
+        )
+        .await?;
+
+        Ok(Response::new(GetMultipleTagsResp { tags }))
     }
 }
 
 async fn run() -> Result<(), SetupError> {
-    let addr = "0.0.0.0:8000".parse().unwrap();
+    let addr = "0.0.0.0:8080".parse().unwrap();
     let config = envy::from_env()?;
     let tgcd = Tgcd::new(&config).await?;
 
@@ -198,8 +233,10 @@ async fn run() -> Result<(), SetupError> {
 }
 
 fn main() {
+    env_logger::init();
     let rt = tokio::runtime::Runtime::new().unwrap();
     if let Err(e) = rt.block_on(run()) {
         eprintln!("{}", e);
+        std::process::exit(1);
     }
 }

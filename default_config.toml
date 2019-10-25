@@ -1,0 +1,2 @@
+server-url = "0.0.0.0:8000"
+max-cores = 0

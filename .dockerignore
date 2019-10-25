@@ -1,7 +1,8 @@
-/target
+**/target
 **/*.rs.bk
 .git
 Dockerfile
 docker-compose.yml
 .dockerignore
 .gitignore
+data

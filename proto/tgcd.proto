@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package tgcd;
+
+import "google/protobuf/empty.proto";
+
+service Tgcd {
+  rpc GetTags(Hash) returns (Tags) {}
+
+  rpc AddTagsToHash(AddTags) returns (google.protobuf.Empty) {}
+
+  rpc CopyTags(SrcDest) returns (google.protobuf.Empty) {}
+
+  rpc GetMultipleTags(GetMultipleTagsReq) returns (GetMultipleTagsResp) {}
+}
+
+message GetMultipleTagsReq {
+  repeated bytes hashes = 1;
+}
+
+message GetMultipleTagsResp {
+  repeated Tags tags = 1;
+}
+
+message Hash {
+  bytes hash = 1;
+}
+
+message Tags {
+  repeated string tags = 1;
+}
+
+message AddTags {
+  bytes hash = 1;
+  repeated string tags = 2;
+}
+
+message SrcDest {
+  bytes src_hash = 1;
+  bytes dest_hash = 2;
+}
