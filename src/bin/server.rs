@@ -253,8 +253,8 @@ impl server::Tgcd for Tgcd {
 }
 
 async fn run() -> Result<(), SetupError> {
-    let addr = "0.0.0.0:8080".parse().unwrap();
-    let config = envy::from_env()?;
+    let config: Config = envy::from_env()?;
+    let addr = format!("0.0.0.0:{}", config.port).parse().unwrap();
     let tgcd = Tgcd::new(&config).await?;
 
     Server::builder()
