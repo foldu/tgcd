@@ -12,7 +12,7 @@ client = ["structopt", "serde_json", "rayon", "cfgen", "serde"]
 server = ["log", "env_logger", "envy", "serde", "tokio-postgres"]
 
 [dependencies]
-tonic = "=0.1.0-alpha.4"
+tonic = "0.1.0-alpha.5"
 tokio = "0.2.0-alpha.6"
 prost = "0.5.0"
 futures-preview = "0.3.0-alpha.19"
@@ -35,7 +35,7 @@ rev = "e4eca3f8732f3f286c7184a3e4306e21065c8562"
 optional = true
 
 [build-dependencies]
-tonic-build = "0.1.0-alpha.4"
+tonic-build = "0.1.0-alpha.5"
 
 [[bin]]
 name = "tgcd"

@@ -17,12 +17,12 @@ pub enum Error {
 }
 
 impl TgcdClient {
-    pub fn connect<D>(url: D) -> Result<Self, tonic::transport::Error>
+    pub async fn connect<D>(url: D) -> Result<Self, tonic::transport::Error>
     where
         D: std::convert::TryInto<tonic::transport::Endpoint>,
         D::Error: Into<Box<dyn std::error::Error + Sync + Send>>,
     {
-        raw::client::TgcdClient::connect(url).map(|c| Self(c))
+        raw::client::TgcdClient::connect(url).await.map(|c| Self(c))
     }
 
     pub async fn add_tags_to_hash(
