@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use thiserror::Error;
 use tonic::Request;
 
-use crate::{raw, Blake2bHash, Tag};
+use crate::{config, raw, Blake2bHash, Tag};
 
 pub struct TgcdClient(raw::client::TgcdClient<tonic::transport::Channel>);
 
@@ -14,6 +14,12 @@ pub enum Error {
 
     #[error("Server returned invalid Tag")]
     InvalidTag(#[from] crate::data::TagError),
+
+    #[error("Can't load global config: {0}")]
+    Config(#[from] config::Error),
+
+    #[error("Can't connect to endpoint: {0}")]
+    Connect(tonic::transport::Error),
 }
 
 impl TgcdClient {
@@ -23,6 +29,13 @@ impl TgcdClient {
         D::Error: Into<Box<dyn std::error::Error + Sync + Send>>,
     {
         raw::client::TgcdClient::connect(url).await.map(|c| Self(c))
+    }
+
+    pub async fn from_global_config() -> Result<Self, Error> {
+        let cfg = config::Config::load().await?;
+        Self::connect(cfg.endpoint.into_string())
+            .await
+            .map_err(Error::Connect)
     }
 
     pub async fn add_tags_to_hash(

@@ -5,21 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use cfgen::{prelude::*, ConfigLoad};
 use rayon::prelude::*;
 use structopt::StructOpt;
 use tgcd::{client::TgcdClient, Blake2bHash, Tag};
 use thiserror::Error;
-
-const DEFAULT_CONFIG: &str = include_str!("../../default_config.toml");
-
-#[derive(Cfgen, serde::Deserialize)]
-#[cfgen(default = "DEFAULT_CONFIG")]
-#[serde(rename_all = "kebab-case")]
-struct Config {
-    server_url: String,
-    max_cores: usize,
-}
 
 #[derive(StructOpt)]
 struct Opt {
@@ -40,17 +29,11 @@ enum Subcmd {
 
 #[derive(Error, Debug)]
 enum Error {
-    #[error("Wrote default config, to {}, please set the server url manually", Config::path().display())]
-    WroteDefault,
-
-    #[error("{0}")]
-    Config(#[from] cfgen::Error),
-
     #[error("{0}")]
     InvalidTag(#[from] tgcd::TagError),
 
-    #[error("Can't connect to tgcd service: {0}")]
-    RpcConnect(tonic::transport::Error),
+    #[error("{0}")]
+    RpcConnect(tgcd::client::Error),
 
     #[error("Error while doing rpc call: {0}")]
     Rpc(#[from] tgcd::client::Error),
@@ -121,17 +104,10 @@ fn try_hash(path: PathBuf) -> Result<Blake2bHash, Error> {
 
 async fn run() -> Result<(), Error> {
     let opt = Opt::from_args();
-    let cfg = match Config::load_or_write_default()? {
-        (ConfigLoad::DefaultWritten, _) => return Err(Error::WroteDefault),
-        (_, cfg) => cfg,
-    };
 
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(cfg.max_cores)
-        .build_global()
-        .unwrap();
+    rayon::ThreadPoolBuilder::new().build_global().unwrap();
 
-    let mut client = TgcdClient::connect(cfg.server_url)
+    let mut client = TgcdClient::from_global_config()
         .await
         .map_err(Error::RpcConnect)?;
 
