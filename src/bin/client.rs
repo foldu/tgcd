@@ -7,7 +7,7 @@ use std::{
 
 use rayon::prelude::*;
 use structopt::StructOpt;
-use tgcd::{client::TgcdClient, Blake2bHash, Tag};
+use tgcd::{Blake2bHash, Tag, TgcdClient};
 use thiserror::Error;
 
 #[derive(StructOpt)]
@@ -33,10 +33,10 @@ enum Error {
     InvalidTag(#[from] tgcd::TagError),
 
     #[error("{0}")]
-    RpcConnect(tgcd::client::Error),
+    RpcConnect(tgcd::Error),
 
     #[error("Error while doing rpc call: {0}")]
-    Rpc(#[from] tgcd::client::Error),
+    Rpc(#[from] tgcd::Error),
 
     #[error("Can't hash file {}: {}", path.display(), e)]
     Hash {
