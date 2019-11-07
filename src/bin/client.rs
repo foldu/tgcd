@@ -131,7 +131,9 @@ async fn run() -> Result<(), Error> {
         .build_global()
         .unwrap();
 
-    let mut client = TgcdClient::connect(cfg.server_url).map_err(Error::RpcConnect)?;
+    let mut client = TgcdClient::connect(cfg.server_url)
+        .await
+        .map_err(Error::RpcConnect)?;
 
     let output: Box<dyn Output> = if opt.json {
         Box::new(Json)

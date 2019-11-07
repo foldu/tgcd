@@ -258,7 +258,8 @@ async fn run() -> Result<(), SetupError> {
     let tgcd = Tgcd::new(&config).await?;
 
     Server::builder()
-        .serve(addr, server::TgcdServer::new(tgcd))
+        .add_service(server::TgcdServer::new(tgcd))
+        .serve(addr)
         .await?;
 
     Ok(())
