@@ -13,7 +13,12 @@ use tgcd::{Blake2bHash, HashError, Tag, TagError};
 #[derive(Deserialize)]
 struct Config {
     postgres_url: String,
+    #[serde(default = "port")]
     port: u16,
+}
+
+fn port() -> u16 {
+    8080
 }
 
 #[derive(Clone)]
