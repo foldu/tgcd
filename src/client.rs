@@ -5,7 +5,7 @@ use tonic::Request;
 
 use crate::{config, raw, Blake2bHash, Tag};
 
-pub struct TgcdClient(raw::client::TgcdClient<tonic::transport::Channel>);
+pub struct TgcdClient(raw::tgcd_client::TgcdClient<tonic::transport::Channel>);
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -28,7 +28,9 @@ impl TgcdClient {
         D: std::convert::TryInto<tonic::transport::Endpoint>,
         D::Error: Into<Box<dyn std::error::Error + Sync + Send>>,
     {
-        raw::client::TgcdClient::connect(url).await.map(|c| Self(c))
+        raw::tgcd_client::TgcdClient::connect(url)
+            .await
+            .map(|c| Self(c))
     }
 
     pub async fn from_global_config() -> Result<Self, Error> {

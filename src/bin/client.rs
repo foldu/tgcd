@@ -195,7 +195,11 @@ async fn run() -> Result<(), Error> {
 }
 
 fn main() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut rt = tokio::runtime::Builder::new()
+        .enable_all()
+        .basic_scheduler()
+        .build()
+        .unwrap();
     if let Err(e) = rt.block_on(run()) {
         eprintln!("{}", e);
         std::process::exit(1);

@@ -1,8 +1,19 @@
 use std::{convert::TryFrom, sync::Arc};
 
-use futures::prelude::*;
+use futures_util::{
+    future,
+    future::{FutureExt, TryFutureExt},
+};
 use serde::Deserialize;
-use tgcd::raw::{server, AddTags, GetMultipleTagsReq, GetMultipleTagsResp, Hash, SrcDest, Tags};
+use tgcd::raw::{
+    tgcd_server,
+    AddTags,
+    GetMultipleTagsReq,
+    GetMultipleTagsResp,
+    Hash,
+    SrcDest,
+    Tags,
+};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio_postgres as postgres;
@@ -183,7 +194,7 @@ async fn add_tags_to_hash(
 }
 
 #[tonic::async_trait]
-impl server::Tgcd for Tgcd {
+impl tgcd_server::Tgcd for Tgcd {
     async fn get_tags(&self, req: Request<Hash>) -> Result<Response<Tags>, Status> {
         let client = self.inner.client.lock().await;
         let hash = Blake2bHash::try_from(&*req.into_inner().hash).map_err(Error::ArgHash)?;
@@ -263,7 +274,7 @@ async fn run() -> Result<(), SetupError> {
     let tgcd = Tgcd::new(&config).await?;
 
     Server::builder()
-        .add_service(server::TgcdServer::new(tgcd))
+        .add_service(tgcd_server::TgcdServer::new(tgcd))
         .serve(addr)
         .await?;
 
@@ -272,7 +283,12 @@ async fn run() -> Result<(), SetupError> {
 
 fn main() {
     env_logger::init();
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut rt = tokio::runtime::Builder::new()
+        .threaded_scheduler()
+        .enable_io()
+        .enable_time()
+        .build()
+        .unwrap();
     if let Err(e) = rt.block_on(run()) {
         eprintln!("{}", e);
         std::process::exit(1);
