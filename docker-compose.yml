@@ -10,9 +10,14 @@ services:
       - ./data:/var/lib/postgresql/data
     ports:
       - 5432:5432
-  app:
+  db_up:
+    image: dadarek/wait-for-dependencies
     depends_on:
       - db
+    command: db:5432
+  app:
+    depends_on:
+      - db_up
     environment:
       POSTGRES_URL: "postgres://postgres:test@db"
     build: .
