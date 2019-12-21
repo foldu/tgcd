@@ -33,6 +33,8 @@ url = { version = "2.1.0", features = ["serde"] }
 toml = "0.5.5"
 tonic = "0.1.0-beta.1"
 deadpool-postgres = "0.4.0"
+refinery = { version = "0.2.0-alpha.2", features = ["tokio-postgres"] }
+refinery-migrations = "0.2.0-alpha.2"
 
 [build-dependencies]
 tonic-build = "0.1.0-beta.1"

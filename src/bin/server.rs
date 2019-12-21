@@ -42,21 +42,27 @@ struct Tgcd {
     inner: Arc<TgcdInner>,
 }
 
+mod embedded {
+    refinery::embed_migrations!("sql");
+}
+
 impl Tgcd {
     async fn new(cfg: &Config) -> Result<Self, SetupError> {
         // TODO: remove unwrap
-        let postgres_config = cfg.postgres_url.parse().unwrap();
-        let mngr = Manager::new(postgres_config, postgres::NoTls);
+        let postgres_config: postgres::config::Config = cfg.postgres_url.parse().unwrap();
+        let mngr = Manager::new(postgres_config.clone(), postgres::NoTls);
         let pool = Pool::new(mngr, cfg.pool_size);
 
-        let mut client = pool.get().await.unwrap();
-        let txn = client.transaction().await.unwrap();
-        let schema = include_str!("../../sql/schema.sql");
-        let _ = txn
-            .batch_execute(schema)
-            .map_err(SetupError::PostgresSchema)
-            .await;
-        txn.commit().await.unwrap();
+        let (mut client, pg) = postgres_config
+            .connect(postgres::NoTls)
+            .await
+            .map_err(SetupError::PostgresConnect)?;
+        // after client is dropped the pg future also terminates
+        // so this doesn't leak
+        tokio::task::spawn(pg);
+        embedded::migrations::runner()
+            .run_async(&mut client)
+            .await?;
 
         Ok(Self {
             inner: Arc::new(TgcdInner { pool }),
@@ -74,7 +80,11 @@ pub enum SetupError {
     PostgresConnect(#[source] postgres::Error),
 
     #[error("Failed creating schema: {0}")]
-    PostgresSchema(#[source] postgres::Error),
+    PostgresSchema(
+        #[source]
+        #[from]
+        refinery_migrations::Error,
+    ),
 
     #[error("Missing environment variable: {0}")]
     Env(#[from] envy::Error),
