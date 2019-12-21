@@ -1,22 +1,17 @@
-use std::{convert::TryFrom, sync::Arc};
-
 use deadpool_postgres::{Manager, Pool};
 use futures_util::{future, future::TryFutureExt};
 use serde::Deserialize;
-use tgcd::raw::{
-    tgcd_server,
-    AddTags,
-    GetMultipleTagsReq,
-    GetMultipleTagsResp,
-    Hash,
-    SrcDest,
-    Tags,
+use std::{convert::TryFrom, sync::Arc};
+use tgcd::{
+    raw::{tgcd_server, AddTags, GetMultipleTagsReq, GetMultipleTagsResp, Hash, SrcDest, Tags},
+    Blake2bHash,
+    HashError,
+    Tag,
+    TagError,
 };
 use thiserror::Error;
 use tokio_postgres as postgres;
 use tonic::{transport::Server, Request, Response, Status};
-
-use tgcd::{Blake2bHash, HashError, Tag, TagError};
 
 #[derive(Deserialize)]
 struct Config {

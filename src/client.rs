@@ -1,9 +1,7 @@
+use crate::{config, raw, Blake2bHash, Tag};
 use std::convert::TryFrom;
-
 use thiserror::Error;
 use tonic::Request;
-
-use crate::{config, raw, Blake2bHash, Tag};
 
 pub struct TgcdClient(raw::tgcd_client::TgcdClient<tonic::transport::Channel>);
 
