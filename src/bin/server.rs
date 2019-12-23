@@ -45,8 +45,6 @@ impl Tgcd {
     async fn new(cfg: &Config) -> Result<Self, SetupError> {
         // TODO: remove unwrap
         let postgres_config: postgres::config::Config = cfg.postgres_url.parse().unwrap();
-        let mngr = Manager::new(postgres_config.clone(), postgres::NoTls);
-        let pool = Pool::new(mngr, cfg.pool_size);
 
         let (mut client, pg) = postgres_config
             .connect(postgres::NoTls)
@@ -58,6 +56,9 @@ impl Tgcd {
         embedded::migrations::runner()
             .run_async(&mut client)
             .await?;
+
+        let mngr = Manager::new(postgres_config, postgres::NoTls);
+        let pool = Pool::new(mngr, cfg.pool_size);
 
         Ok(Self {
             inner: Arc::new(TgcdInner { pool }),
