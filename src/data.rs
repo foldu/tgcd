@@ -43,6 +43,12 @@ impl Tag {
     }
 }
 
+impl AsRef<str> for Tag {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Clone)]
 pub struct Blake2bHash(Box<[u8; 64]>);
 
