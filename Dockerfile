@@ -1,22 +1,16 @@
-FROM rust:1.40
-RUN USER=root cargo new --bin tgcd
-WORKDIR /tgcd
+FROM rust:1.41
+RUN mkdir /build && cd /build
+WORKDIR /build
 RUN rustup component add rustfmt && rustup target add x86_64-unknown-linux-musl
-
-COPY ./Cargo.lock /Cargo.toml ./
-
-RUN mkdir src/bin && mv src/main.rs src/bin/server.rs \
-    &&  cargo build --release --no-default-features --features server --target x86_64-unknown-linux-musl \
-    && rm src/bin/*.rs
 
 COPY . .
 
-RUN cargo build --release --no-default-features --features server --target x86_64-unknown-linux-musl
+RUN cargo build --release --target x86_64-unknown-linux-musl -p tgcd-server
 
-FROM alpine:3.11.0
+FROM alpine:3.11.1
 
-COPY --from=0 /tgcd/target/x86_64-unknown-linux-musl/release/tgcd .
+COPY --from=0 /build/target/x86_64-unknown-linux-musl/release/tgcd-server .
 
 EXPOSE 8080
 
-CMD ["./tgcd"]
+CMD ["./tgcd-server"]
