@@ -1,0 +1,20 @@
+[package]
+name = "tgc"
+version = "0.1.0"
+authors = ["foldu <foldu@protonmail.com>"]
+edition = "2018"
+license = "Unlicense OR MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[dependencies]
+tokio = { version = "0.2.11", features = ["rt-threaded", "fs"] }
+futures-util = "0.3.1"
+thiserror = "1.0.10"
+serde = { version = "1.0.104", features = ["derive"] }
+structopt = { version = "0.3.9" }
+rayon = { version = "1.3.0" }
+serde_json = { version = "1.0.45" }
+tonic = "0.1.1"
+tgcd = { path = "../tgcd" }

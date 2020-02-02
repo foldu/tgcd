@@ -4,7 +4,6 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-
 use rayon::prelude::*;
 use structopt::StructOpt;
 use tgcd::{Blake2bHash, Tag, TgcdClient};
