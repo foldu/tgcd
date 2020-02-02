@@ -1,6 +1,7 @@
 use deadpool_postgres::{Manager, Pool};
 use futures_util::{future, future::TryFutureExt};
 use serde::Deserialize;
+use slog_scope::{crit, error};
 use std::{convert::TryFrom, sync::Arc};
 use tgcd::{
     raw::{tgcd_server, AddTags, GetMultipleTagsReq, GetMultipleTagsResp, Hash, SrcDest, Tags},
@@ -104,7 +105,10 @@ pub enum Error {
 impl From<Error> for Status {
     fn from(other: Error) -> Self {
         match other {
-            Error::Postgres(_) => Status::new(tonic::Code::Unavailable, "db error"),
+            Error::Postgres(e) => {
+                error!("Db error"; slog::o!("error" => e.to_string()));
+                Status::new(tonic::Code::Unavailable, "db error")
+            }
             Error::ArgHash(_) | Error::ArgTag(_) => {
                 Status::new(tonic::Code::InvalidArgument, "Received invalid argument")
             }
@@ -285,7 +289,17 @@ async fn run() -> Result<(), SetupError> {
 }
 
 fn main() {
-    env_logger::init();
+    use slog::Drain;
+    let decorator = slog_term::TermDecorator::new().build();
+    // FIXME: use async logger instead
+    let drain = std::sync::Mutex::new(slog_term::FullFormat::new(decorator).build())
+        .filter_level(slog::Level::Info)
+        .fuse();
+
+    let logger = slog::Logger::root(drain, slog::o!());
+
+    let _scope_guard = slog_scope::set_global_logger(logger);
+
     let mut rt = tokio::runtime::Builder::new()
         .threaded_scheduler()
         .enable_io()
@@ -293,7 +307,7 @@ fn main() {
         .build()
         .unwrap();
     if let Err(e) = rt.block_on(run()) {
-        eprintln!("{}", e);
+        crit!("{}", e);
         std::process::exit(1);
     }
 }
