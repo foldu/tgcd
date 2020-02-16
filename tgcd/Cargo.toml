@@ -20,3 +20,4 @@ tonic = "0.1.0"
 
 [build-dependencies]
 tonic-build = "0.1.0"
+which = "3.1.0"
