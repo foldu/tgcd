@@ -1,6 +1,22 @@
-[workspace]
-members = [
-    "tgcd",
-    "tgcd-server",
-    "tgc",
-]
+[package]
+name = "tgcd"
+version = "0.1.0"
+authors = ["foldu <foldu@protonmail.com>"]
+edition = "2018"
+license = "Unlicense OR MIT"
+
+[dependencies]
+tokio = { version = "0.2.6", features = ["rt-threaded", "fs"] }
+prost = "0.6.0"
+futures-util = "0.3.1"
+thiserror = "1.0.9"
+blake2b_simd = "0.5.9"
+hex = "0.4.0"
+serde = { version = "1.0.104", features = ["derive"] }
+directories = "2.0.2"
+url = { version = "2.1.0", features = ["serde"] }
+toml = "0.5.5"
+tonic = "0.1.0"
+
+[build-dependencies]
+tonic-build = "0.1.0"

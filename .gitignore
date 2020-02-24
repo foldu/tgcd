@@ -2,3 +2,4 @@
 **/*.rs.bk
 data
 target
+Cargo.lock
