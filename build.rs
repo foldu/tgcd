@@ -1,3 +1,6 @@
-fn main() {
-    tonic_build::compile_protos("proto/tgcd.proto").unwrap();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tonic_build::configure()
+        .format(false)
+        .compile(&["proto/tgcd.proto"], &["proto"])?;
+    Ok(())
 }
