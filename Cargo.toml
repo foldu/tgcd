@@ -6,17 +6,17 @@ edition = "2018"
 license = "Unlicense OR MIT"
 
 [dependencies]
-tokio = { version = "0.2.16", features = ["rt-threaded", "fs"] }
+tokio = { version = "0.2.22", features = ["rt-threaded", "fs"] }
 prost = "0.6.1"
-futures-util = "0.3.4"
-thiserror = "1.0.14"
+futures-util = "0.3.5"
+thiserror = "1.0.20"
 blake2b_simd = "0.5.10"
 hex = "0.4.2"
-serde = { version = "1.0.106", features = ["derive"] }
-directories = "2.0.2"
+serde = { version = "1.0.115", features = ["derive"] }
+directories = "3.0.1"
 url = { version = "2.1.1", features = ["serde"] }
 toml = "0.5.6"
-tonic = "0.2.0"
+tonic = "0.3.1"
 
 [build-dependencies]
-tonic-build = "0.2.0"
+tonic-build = "0.3.1"
